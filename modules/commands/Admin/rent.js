@@ -85,17 +85,67 @@ module.exports.run = async ({ api, event, args }) => {
       time_end: end.format("DD/MM/YYYY")
     });
 
-    saveData();
+    /* ================= ADMIN LINK ================= */
+const ADMIN_FB = "https://www.facebook.com/share/17rNieBDjG/";
 
-    await api.changeNickname(
-      `『 ${global.config.PREFIX} 』 ⪼ ${global.config.BOTNAME} | ${PACKAGES[pack]} | HSD: ${end.format(
-        "DD/MM/YYYY"
-      )}`,
-      event.threadID,
-      api.getCurrentUserID()
-    );
+/* ===== ADD ===== */
+if (sub === "add") {
+  const timeInput = args[1];
+  const pack = (args[2] || "").toLowerCase();
 
-    return send(`✅ Đã thêm **${PACKAGES[pack]}** (${days} ngày)`);
+  if (!timeInput || !PACKAGES[pack])
+    return send("❎ Sai cú pháp!\nVí dụ: rent add 40 thuong | rent add 6T vip");
+
+  if (rentData.find(i => i.t_id == event.threadID))
+    return send("⚠️ Nhóm này đã thuê bot rồi!");
+
+  let days = 0;
+  let monthText = "";
+
+  if (timeInput.endsWith("T")) {
+    const m = parseInt(timeInput);
+    days = m * 30;
+    monthText = `${m} tháng`;
+  } else {
+    days = parseInt(timeInput);
+    monthText = `${days} ngày`;
+  }
+
+  if (isNaN(days) || days <= 0)
+    return send("❎ Thời gian không hợp lệ!");
+
+  const start = moment.tz(TIMEZONE);
+  const end = start.clone().add(days, "days");
+
+  rentData.push({
+    t_id: event.threadID,
+    id: event.senderID,
+    pack,
+    time_start: start.format("DD/MM/YYYY"),
+    time_end: end.format("DD/MM/YYYY")
+  });
+
+  saveData();
+
+  await api.changeNickname(
+    `『 ${global.config.PREFIX} 』 ⪼ ${global.config.BOTNAME} | ${PACKAGES[pack]} | HSD: ${end.format("DD/MM/YYYY")}`,
+    event.threadID,
+    api.getCurrentUserID()
+  );
+
+  return send(
+`🎉 DUYỆT THUÊ BOT THÀNH CÔNG 🎉
+
+👑 Gói: ${PACKAGES[pack]}
+🗓 Thời hạn: ${monthText}
+⏳ Hoạt động đến: ${end.format("DD/MM/YYYY")}
+
+✅ Bot đã được admin duyệt
+🤖 Bot bắt đầu hoạt động ngay từ bây giờ!
+
+📞 Admin hỗ trợ:
+${ADMIN_FB}`
+  );
   }
 
   /* ===== INFO ===== */
@@ -182,12 +232,20 @@ cron.schedule("0 15 * * *", async () => {
 
 /* ================= KHÓA LỆNH ================= */
 global.checkRent = function (threadID, commandName, senderID) {
-  const data = rentData.find((i) => i.t_id == threadID);
-  if (!data) return false;
-  if (!isExpired(data.time_end)) return false;
-
+  // Admin luôn được dùng
   if (global.config.ADMINBOT.includes(senderID)) return false;
+
+  // Lệnh rent luôn cho phép
   if (commandName === "rent") return false;
 
-  return true;
+  const data = rentData.find(i => i.t_id == threadID);
+
+  // Chưa thuê → chặn
+  if (!data) return true;
+
+  // Hết hạn → chặn
+  if (isExpired(data.time_end)) return true;
+
+  // Còn hạn → cho dùng
+  return false;
 };
